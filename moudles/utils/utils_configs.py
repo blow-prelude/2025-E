@@ -1,0 +1,9 @@
+# 鉴别靶纸时用于限定轮廓面积
+MINAREA = 5000
+MAXAREA = 10000
+# 鉴定靶纸时的高/宽
+WIDTH_HEIGHT_RATION_LOW = 0.30
+WIDTH_HEIGHT_RATION_HIGH = 0.40
+
+# 多边形拟合的参数
+EPSILON_RATION = 0.02
