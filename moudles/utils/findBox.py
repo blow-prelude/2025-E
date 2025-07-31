@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -18,7 +18,7 @@ class FindBox:
     def __init__(self, bin_img: MatLike):
         self.bin_img = bin_img
 
-    def get_box(self) -> NDArray:
+    def get_box(self) -> Tuple[NDArray, float, float]:
         """
         return  外框4个角点坐标
         : 该函数可以返回图像中最大轮廓的4个角点
@@ -31,9 +31,12 @@ class FindBox:
         )[0]
         if len(contours) == 0:
             print("[WARMING] no contours found")
-            return np.empty((0, 2))
-        box_corner: NDArray = self.confirm_box(contours)
-        return box_corner
+            return tuple()
+        package = self.confirm_box(contours)
+        if package == tuple():
+            return tuple()
+        box_corner, target_h, target_w = package
+        return (box_corner, target_h, target_w)
         # np method
         # time1 = time()
         # areas = np.array([cv2.contourArea(c) for c in contours])
@@ -46,7 +49,7 @@ class FindBox:
         # 按照左上右上的顺时针排序
         # print(f"[DEBUG] sorted box is {box_corner}")
 
-    def confirm_box(self, contours: Sequence[MatLike]) -> NDArray:
+    def confirm_box(self, contours: Sequence[MatLike]) -> Tuple[NDArray, float, float]:
         """
         : param contours   所有轮廓
         : return certain_box   确定的A4纸角点
@@ -54,7 +57,7 @@ class FindBox:
         """
         for idx, con in enumerate(contours):
             area = cv2.contourArea(con)
-            if configs.MAXAREA > area > configs.MINAREA:
+            if area > configs.MINAREA:
                 peri = cv2.arcLength(con, True)
                 approx = cv2.approxPolyDP(con, peri * configs.EPSILON_RATION, True)
                 if len(approx) == 4:
@@ -85,8 +88,8 @@ class FindBox:
                         + (left_top[1] - left_bottom[1]) ** 2
                     )
                     h2 = np.sqrt(
-                        (right_top[0] - right_top[0]) ** 2
-                        + (right_top[1] - right_top[1]) ** 2
+                        (right_top[0] - right_bottom[0]) ** 2
+                        + (right_top[1] - right_bottom[1]) ** 2
                     )
                     avarage_h = (h1 + h2) / 2
                     avarage_w = (w1 + w2) / 2
@@ -97,17 +100,24 @@ class FindBox:
                         >= configs.WIDTH_HEIGHT_RATION_LOW
                     ):
                         print("[INFO] successfully find certain box")
-                        return np.array(
-                            [left_top, right_top, right_bottom, left_bottom],
-                            dtype=np.float32,
-                        ).reshape(4, 2)
-                    else:
-                        print("[INFO] cannot find a A4 ractangle")
                         print(f"area of con : {area}")
                         print(f"h_w_rate: {h_w_rate}")
+
+                        return (
+                            np.array(
+                                [left_top, right_top, right_bottom, left_bottom],
+                                dtype=np.float32,
+                            ).reshape(4, 2),
+                            avarage_h,
+                            avarage_w,
+                        )
+                    else:
+                        # print("[INFO] cannot find a A4 ractangle")
+                        # print(f"area of con : {area}")
+                        # print(f"h_w_rate: {h_w_rate}")
                         continue
-        print("find no suitable box")
-        return np.empty(0)
+        # print("find no suitable box")
+        return tuple()
 
     def draw_box(self, box_corner: NDArray, canvas: MatLike) -> None:
         """
