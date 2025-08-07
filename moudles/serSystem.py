@@ -4,7 +4,7 @@ import serial
 
 
 class SerSystem:
-    def __init__(self, port, baudrate=9600, timeout=1):
+    def __init__(self, port, baudrate=115200, timeout=0.1):
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
@@ -40,3 +40,17 @@ class SerSystem:
         if not self.ser.is_open:
             print("Serial port is not open.")
             return None
+        with self.ser as ser:
+            if ser.in_waiting > 0:
+                line = ser.readline()
+                data_str = line.decode("utf-8").strip()
+                if data_str in ("y2", "y3", "y4", "y5"):
+                    print(f"successfully receive {data_str}")
+                    return data_str
+                elif data_str == "n":
+                    print(f"successfully receive {data_str}")
+                    return data_str
+                elif data_str:
+                    # 接收到的不为空
+                    print(f"receive unexpected data :{data_str}")
+                    return None

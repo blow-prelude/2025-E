@@ -1,4 +1,4 @@
-from typing import Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -60,6 +60,7 @@ class FindBox:
             if area > configs.MINAREA:
                 peri = cv2.arcLength(con, True)
                 approx = cv2.approxPolyDP(con, peri * configs.EPSILON_RATION, True)
+                # print(f"len(approx) : {len(approx)}")
                 if len(approx) == 4:
                     approx = np.array(approx, dtype=np.float32).reshape((4, 2))
                     # print(f"approx : {approx}")
@@ -118,6 +119,88 @@ class FindBox:
                         continue
         # print("find no suitable box")
         return tuple()
+
+    def get_a4_candidates(self) -> List[Tuple[NDArray, float, float]]:
+        """
+        在图像中寻找所有符合A4纸高宽比的矩形。
+
+        :return: 返回一个列表，每个元素都是一个元组 (角点, 高, 宽)。
+                 如果没有找到，返回空列表。
+        """
+        contours, _ = cv2.findContours(
+            self.bin_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+
+        a4_candidates = []
+        if not contours:
+            return a4_candidates
+
+        for con in contours:
+            area = cv2.contourArea(con)
+            if area > configs.MINAREA:
+                peri = cv2.arcLength(con, True)
+                approx = cv2.approxPolyDP(con, peri * configs.EPSILON_RATION, True)
+
+                if len(approx) == 4:
+                    # 分析这个四边形是否像A4纸
+                    package = self._analyze_a4_quadrilateral(approx.reshape(4, 2))
+                    if package:
+                        a4_candidates.append(package)
+
+        return a4_candidates
+
+    def _analyze_a4_quadrilateral(
+        self, points: NDArray
+    ) -> Optional[Tuple[NDArray, float, float]]:
+        """
+        分析一个四边形，检查其高宽比是否符合A4纸的特性。
+
+        :param points: 四边形的四个角点。
+        :return: 如果符合，返回 (排序后的角点, 高, 宽)；否则返回 None。
+        """
+        # 对角点进行排序：[左上, 右上, 右下, 左下]
+        rect = np.zeros((4, 2), dtype="int32")
+        s = points.sum(axis=1)
+        rect[0] = points[np.argmin(s)]  # 左上角
+        rect[2] = points[np.argmax(s)]  # 右下角
+
+        diff = np.diff(points, axis=1)
+        rect[1] = points[np.argmin(diff)]  # 右上角
+        rect[3] = points[np.argmax(diff)]  # 左下角
+
+        (tl, tr, br, bl) = rect
+
+        # 计算宽度和高度
+        widthA = np.linalg.norm(br - bl)
+        widthB = np.linalg.norm(tr - tl)
+        avg_w = (widthA + widthB) / 2
+
+        heightA = np.linalg.norm(tr - br)
+        heightB = np.linalg.norm(tl - bl)
+        avg_h = (heightA + heightB) / 2
+
+        if avg_w == 0:
+            return None
+
+        # 核心：检查高宽比是否在容忍范围内
+        aspect_ratio = avg_h / avg_w
+
+        # if not (
+        #     abs(aspect_ratio - configs.A4_ASPECT_RATIO) < configs.ASPECT_RATIO_TOLERANCE
+        #     or abs((1 / aspect_ratio) - configs.A4_ASPECT_RATIO)
+        #     < configs.ASPECT_RATIO_TOLERANCE
+        # ):
+        if (
+            not abs(aspect_ratio - configs.A4_ASPECT_RATIO)
+            < configs.ASPECT_RATIO_TOLERANCE
+        ):
+            return None
+
+        # # 如果纸是横放的，交换高和宽使其统一为竖放标准
+        # if aspect_ratio < 1.0:
+        #     avg_h, avg_w = avg_w, avg_h
+
+        return (rect, float(avg_h), float(avg_w))
 
     def draw_box(self, box_corner: NDArray, canvas: MatLike) -> None:
         """
